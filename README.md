@@ -57,7 +57,7 @@ To determine which rows contain metadata, check the **New functionality** sectio
  - If **Column-based identification** was used, each column in a row is considered a data column, except for the *Better CSV version column*.
  - If **Row-based identification** was used, the second column is the first data column.
 
-In a metadata row, the first data column must be a column identifier, row identifier, or a combination of both separated by a `#` character.
+The first data column is always a column identifier, row identifier, or a combination of both separated by a `#` character.
 
 Row and column identifiers are the "real" row or column, as seen by any CSV parser.
  - If there's a header column, your row identifier would start at `1` as that's the first data row.
@@ -88,24 +88,24 @@ If you want metadata to apply to all rows, simply leave out the row identifier (
 If you want metadata to apply to all rows except one row, prepend the row identifier with a `!` character (ex. `12#!7` will apply to column 12 for all rows except row 7)
 
 ##### Field Types
-After the first metadata column (the column+row identifier), 
+A metadata row column with the string "Type" is followed by a column string with the field type to use.
 
-The type of a field is identified by an index from 0-65535.
+The type of a field is identified by an index number from 0-65535.
 
 Types can be combined to allow parsing to match more than one type, by following one type index with `+` and another type index. They are parsed serially.
  - Within a parsing application, parsing a data type results in a particular type of object.
  - That new object is then passed onto the next type specified.
  - This allows you to parse a field via one type into one object, and then pass that new object onto another type parser, resulting in yet another object.
- - So for example, by using type `8+12`, a field will be parsed as Base64 data into a binary object, and then parsed as GZip into yet another binary object.
- - Creative use of type specification therefore allows you to programmatically encode and decode data on the fly through various data formats/types.
+ - So for example, by using type `42+50+9`, a field will be parsed as Base64 data into a binary object, and then parsed as GZip into yet another binary object, and finally parsed into a string-type object (in the final case, using the "Encoding" metadata feature).
+ - Creative use of type specification allows you to programmatically encode and decode data on the fly through various data formats/types.
 
-Types can declare invalid type parsing by following one type with the `-` character and another type index. (Ex: for type `1+4-2`, the field data will be considered invalid if it contains numbers)
+Types can declare invalid type parsing by following one type with the `-` character and another type index. (ex: for type `1+31-3`, the field data will be considered invalid if it contains numbers)
 
 | Type Index | Type Descriptor | Example |
 | ---        | ---             | ---     |
 | 0  | Null type. Column is neither empty nor full, but is disabled. | Null |
 | 1  | Alphabet type. Characters of the alphabet only. Case-sensitive. Locale/encoding specific. | `ABCDEFGHIJKLMNOPQRSTUVWXYZ` |
-| 2  | Symbol type. Printable special characters and symbols. Locale/encoding specific. | `~!@#$%^&*()_+`-={}|[]\:";'<>?,./` |
+| 2  | Symbol type. Printable special characters and symbols. Locale/encoding specific. | `~!@#$%^&*()_+\`-={}|[]\:";'<>?,./` |
 | 3  | Numeric type, integer. Locale/encoding specific. | `0123456789` |
 | 4  | Numeric type, float. Locale/encoding specific. | `0.133235242` |
 | 5  | Boolean type. Only accepts values `0` or `1`. | `0`, `1` |
@@ -126,16 +126,16 @@ Types can declare invalid type parsing by following one type with the `-` charac
 | 27 | Seconds since epoch type. | |
 | 30 | URI type. | |
 | 31 | Email type. MUST parse to ONLY RFC6532 semantics. (Hey, you, code monkey! Don't be lazy, follow the RFC!) | |
-| 32 | Phone type. Characters supported include digits 0-9, letters A-D, and special characters `+`, `-`, `,`, `\*`, and `#`. The `+` character may ONLY come as the first entry in the field, and must be followed by a valid global country code. Character `-` is supported but stripped during parsing as it is only a visual identifier. Case-insensitive. Locale/encoding specific. | +1-555-555-5555,,3,654654654 |
+| 32 | Phone type. Characters supported include digits 0-9, letters A-D, and special characters `+`, `-`, `,`, `\*`, and `#`. The `+` character may ONLY come as the first entry in the field, and must be followed by a valid global country code. Character `-` is supported but stripped during parsing as it is only a visual identifier. Case-insensitive. Locale/encoding specific. | `+1-555-555-5555,,3,654654654` |
 | 40 | JSON string type. A string encoded for a JSON string type element, not a whole JSON document. | `Hello\nWorld\t\ud83d\ude1b` |
 | 41 | Base32 type. MUST parse to ONLY RFC4648 Section 6 semantics. Useful for fields that require a restricted character set. | `JBSWY3DPEBLW64TMMQFA====` |
 | 42 | Base64 type. MUST parse to ONLY RFC4648 Section 4 semantics. Even though this encoding incurs a 33% size increase, testing shows some languages have an extremely fast implementation of this encoding, so it may be preferred at the expense of additional size. | `SGVsbG8gV29ybGQK` |
 | 43  | BCenc85 type. This is a proprietary encoding similar to Adobe's Ascii85 format (ideal for binary files), with the exception that the character set used is ASCII characters 35-120. This preserves the advantages of the original format, but skips the `!` and `"` characters, which allows it to be enclosed between double-quote characters without additional escaping. This is more space-efficient than Base64 and retains backwards compatibility with CSV files, but is less space-efficient than the BCencraw data type. | 
 | 44 | BCencraw data type. Any character at all is allowed, except for `"`, which must be escaped with an additional double-quote (ex. `""`). Use of this data type will lead to some extremely ugly-looking files, and definitely **will not** be compatible with any existing CSV parser. However, for extremely large fields, this will result in much less wasted file space, less memory use, and should be much faster to parse (assuming a fast parser e.g. a C library). If you use this data type, rename your file extension to `.bcsv` to prevent confusion. | |
-| 50 | GZip data type. Fields MUST NOT use this type alone. Fields may use a different binary-encoding format (such as Base64, BCencraw, etc) to encode GZip data, and use a field type of that format plus this one (ex: field type `8+12` would identify a field as being base64-encoded gzip data). | |
-| 60 | JPEG data type. Fields MUST NOT use this type alone. Fields may use a different binary encoding format (such as Base64, BCencraw, etc) to encode JPEG data, and use a field type of that format plus this one (ex: field type `8+13` would identify a field as being base64-encoded png data). | |
-| 61 | GIF data type. Fields MUST NOT use this type alone. Fields may use a different binary encoding format (such as Base64, BCencraw, etc) to encode GIF data, and use a field type of that format plus this one (ex: field type `8+13` would identify a field as being base64-encoded png data). | |
-| 62 | PNG data type. Fields MUST NOT use this type alone. Fields may use a different binary encoding format (such as Base64, BCencraw, etc) to encode PNG data, and use a field type of that format plus this one (ex: field type `8+13` would identify a field as being base64-encoded png data). | |
+| 50 | GZip data type. Fields MUST NOT use this type alone; use after a different field type that encodes binary data. | |
+| 60 | JPEG data type. Fields MUST NOT use this type alone; use after a different field type that encodes binary data. | |
+| 61 | GIF data type. Fields MUST NOT use this type alone; use after a different field type that encodes binary data. | |
+| 62 | PNG data type. Fields MUST NOT use this type alone; use after a different field type that encodes binary data. | |
 
 ##### Character Encoding
 A metadata row column with the string "Encoding" is followed by a column string with the encoding to use.
@@ -157,11 +157,11 @@ A metadata row column with the string "Max" is followed by a column number with 
 "#!BCv1","1","Type","1","Encoding","UTF-8","Min","0","Max","50"
 "#!BCv1","2-3","Type","1","Encoding","UTF-8","Min","0","Max","25"
 "#!BCv1","4-8","Type","1+2+3","Encoding","UTF-8","Min","0","Max","25"
-"#!BCv1","9-10","Type","2","Encoding","UTF-8","Min","0","Max","25"
-"#!BCv1","11","Type","01","Encoding","UTF-8","Min","0","Max","25"
-"#!BCv1","12","Type","1","Encoding","UTF-8","Min","0","Max","25"
-"#!BCv1","13","Type","7","Encoding","UTF-8","Min","8"
-"#!BCv1","14","Type","8+12"
+"#!BCv1","9-10","Type","32","Encoding","UTF-8","Min","0","Max","25"
+"#!BCv1","11","Type","31","Encoding","UTF-8","Min","0","Max","25"
+"#!BCv1","12","Type","1+2+3","Encoding","UTF-8","Min","0","Max","25"
+"#!BCv1","13","Type","1+2+3","Encoding","UTF-8","Min","8"
+"#!BCv1","14","Type","42+62"
 "!BCv1","Peter Willis","Peter","Willis","1234 Full Rd","","Somecity","Somestate","12345","USA","1","+1-555-555-5555","","foo@foo.foo","someusername1","h873hf8w7f82g8rfd2wf",""
 ```
 
@@ -172,11 +172,11 @@ A metadata row column with the string "Max" is followed by a column number with 
 "1","Type","1","Encoding","UTF-8","Min","0","Max","50","#1"
 "2-3","Type","1","Encoding","UTF-8","Min","0","Max","25","#1"
 "4-8","Type","1+2+3","Encoding","UTF-8","Min","0","Max","25","#1"
-"9-10","Type","2","Encoding","UTF-8","Min","0","Max","25","#1"
-"11","Type","01","Encoding","UTF-8","Min","0","Max","25","#1"
-"12","Type","1","Encoding","UTF-8","Min","0","Max","25","#1"
-"13","Type","7","Encoding","UTF-8","Min","8","","","#1"
-"14","Type","8+12","","","","","","","#1"
+"9-10","Type","32","Encoding","UTF-8","Min","0","Max","25","#1"
+"11","Type","31","Encoding","UTF-8","Min","0","Max","25","#1"
+"12","Type","1+2+3","Encoding","UTF-8","Min","0","Max","25","#1"
+"13","Type","1+2+3","Encoding","UTF-8","Min","8","","","#1"
+"14","Type","42+62","","","","","","","#1"
 "Peter Willis","Peter","Willis","1234 Full Rd","","Somecity","Somestate","12345","USA","1","+1-555-555-5555","","foo@foo.foo","someusername1","h873hf8w7f82g8rfd2wf",""
 ```
 
